@@ -23,7 +23,7 @@ LINETYPES: Final[dict] = {line: i for i, line in enumerate(linetypes)}
 # Define the Flux priors (scale relative to the guess)
 flux: Final[dict[str, tuple[float]]] = {
     'narrow': (-2, 2),
-    'broad': (0, 3),
+    'broad': (0, 10),  # Increased from 3 to 10 to allow stronger broad components
     'cauchy': (0, 3),
     'absorption': (-2, 0),
     'emission': (0, 2),
@@ -45,7 +45,7 @@ redshift: Final[dict[str, tuple[float]]] = {
 # Define the Dispersion priors in km/s
 fwhm: Final[dict[str, tuple[float]]] = {
     'narrow': (0, 750),
-    'broad': (250, 2500),
+    'broad': (250, 5000),  # Increased from 2500 to 5000 to allow very broad components
     'cauchy': (250, 2500),
     'absorption': (0, 1000),
     'emission': (0, 1000),

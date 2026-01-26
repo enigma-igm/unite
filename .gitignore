@@ -5,3 +5,9 @@ dist/
 # pixi environments
 .pixi
 *.egg-info
+*.pdf
+*.png
+*.jpg
+*.npz
+*.fits
+*.csv
