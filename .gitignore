@@ -5,9 +5,18 @@ dist/
 # pixi environments
 .pixi
 *.egg-info
+
+# Data and output files
 *.pdf
 *.png
 *.jpg
 *.npz
 *.fits
 *.csv
+
+# macOS
+.DS_Store
+
+# Output directories
+out/
+out_*/
