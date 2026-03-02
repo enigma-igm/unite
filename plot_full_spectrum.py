@@ -148,7 +148,7 @@ def load_and_plot(srcid, data_dir, output_dir, label='broad_abs',
                 wave_aa, z, logN, b_abs, dv_abs, n_max=50))
 
             ax2 = ax.twinx()
-            ax2.plot(wave, T_med, color='purple', lw=1.5, alpha=0.8,
+            ax2.step(wave, T_med, where='mid', color='purple', lw=1.5, alpha=0.8,
                      label='Transmission')
             ax2.set_ylim(-0.05, 1.15)
             ax2.set_ylabel('T(λ)', color='purple', fontsize=10)

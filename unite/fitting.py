@@ -785,7 +785,7 @@ def plotResults(
                 ax2.plot(
                     wave[mask], trans_median[mask],
                     color='purple', alpha=0.7, lw=1.5,
-                    linestyle='-', label='Transmission'
+                    drawstyle='steps-mid', label='Transmission'
                 )
                 ax2.set_ylim(-0.05, 1.15)
                 ax2.set_ylabel('T(λ)', color='purple', fontsize=9)
