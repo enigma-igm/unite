@@ -847,6 +847,24 @@ def plotResults(
         fontsize='large',
     )
 
+    # Add absorption parameter annotation if enabled
+    if absorption_enabled and 'log_NHI' in samples:
+        best_idx = samples['logP'].argmax()
+        qs = np.quantile(samples['log_NHI'], [0.16, 0.50, 0.84])
+        bqs = np.quantile(samples['b_abs'], [0.16, 0.50, 0.84])
+        vqs = np.quantile(samples['delta_v_abs'], [0.16, 0.50, 0.84])
+        abs_text = (
+            f'$\\log\\,N_{{\\rm HI}} = {qs[1]:.2f}^{{+{qs[2]-qs[1]:.2f}}}_{{-{qs[1]-qs[0]:.2f}}}$\n'
+            f'$b_{{\\rm abs}} = {bqs[1]:.0f}^{{+{bqs[2]-bqs[1]:.0f}}}_{{-{bqs[1]-bqs[0]:.0f}}}$ km/s\n'
+            f'$\\Delta v_{{\\rm abs}} = {vqs[1]:.0f}^{{+{vqs[2]-vqs[1]:.0f}}}_{{-{vqs[1]-vqs[0]:.0f}}}$ km/s'
+        )
+        fig.text(
+            0.98, 0.98, abs_text,
+            ha='right', va='top', fontsize=9,
+            transform=fig.transFigure,
+            bbox=dict(boxstyle='round,pad=0.3', facecolor='lightyellow', alpha=0.8),
+        )
+
     # Show the plot
     fig.savefig(
         os.path.join(
