@@ -19,22 +19,37 @@ from unite.spectra import NIRSpecSpectra
 from unite.absorption import full_balmer_transmission, BALMER_LIMIT
 
 
-def load_and_plot(srcid, data_dir, output_dir, label='broad_abs'):
-    """Load spectra + fit results and plot full spectrum with absorption."""
+def load_and_plot(srcid, data_dir, output_dir, label='broad_abs',
+                  spec_table=None, spectra_directory=None):
+    """Load spectra + fit results and plot full spectrum with absorption.
 
-    SPEC_TABLE = os.path.join(data_dir, 'rubies_all_spectra/rubies_all_spectra_table.fits')
-    SPEC_DIR = os.path.join(data_dir, 'rubies_all_spectra')
+    Parameters
+    ----------
+    srcid : int
+    data_dir : str
+    output_dir : str
+    label : str
+    spec_table : astropy Table, optional
+        Pre-loaded and standardised spectrum table. If None, loads RUBIES table.
+    spectra_directory : str, optional
+        Directory containing spectra files. If None, uses RUBIES default.
+    """
 
-    # Load and prep table
-    spec_table = Table.read(SPEC_TABLE)
-    spec_table.rename_column('filename', 'file')
-    z_col = np.where(
-        (np.isfinite(spec_table['z_spec'])) & (spec_table['z_spec'] > 0),
-        spec_table['z_spec'], spec_table['z_map']
-    )
-    spec_table['z'] = z_col
-    spec_table['zfit'] = spec_table['z']
-    spec_table['grating'] = [g.split('_')[0].upper() for g in spec_table['grating']]
+    if spec_table is None:
+        SPEC_TABLE = os.path.join(data_dir, 'rubies_all_spectra/rubies_all_spectra_table.fits')
+        spec_table = Table.read(SPEC_TABLE)
+        if 'filename' in spec_table.colnames and 'file' not in spec_table.colnames:
+            spec_table.rename_column('filename', 'file')
+        z_col = np.where(
+            (np.isfinite(spec_table['z_spec'])) & (spec_table['z_spec'] > 0),
+            spec_table['z_spec'], spec_table['z_map']
+        )
+        spec_table['z'] = z_col
+        spec_table['zfit'] = spec_table['z']
+        spec_table['grating'] = [g.split('_')[0].upper() for g in spec_table['grating']]
+
+    if spectra_directory is None:
+        spectra_directory = os.path.join(data_dir, 'rubies_all_spectra')
 
     rows = spec_table[spec_table['srcid'] == srcid]
 
@@ -54,7 +69,7 @@ def load_and_plot(srcid, data_dir, output_dir, label='broad_abs'):
     root = rows[0]['root']
 
     # Load spectra
-    spectra = NIRSpecSpectra(rows, SPEC_DIR)
+    spectra = NIRSpecSpectra(rows, spectra_directory)
     z = spectra.redshift_initial
     um_to_aa = spectra.spectra[0].λ_unit.to('Angstrom')
 
