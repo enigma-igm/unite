@@ -65,7 +65,7 @@ def NIRSpecFit(
             raise ValueError(f'Unknown backend: {backend}')
 
     # Plot the results
-    plotResults(config, rows, model_args, samples, output_directory)
+    plotResults(config, rows, model_args, samples, output_directory, extras=extras)
 
     # Save the results
     saveResults(config, rows, model_args, samples, extras, output_directory)
@@ -602,7 +602,8 @@ def saveResults(config, rows, model_args, samples, extras, output_dir) -> None:
 
 
 def plotResults(
-    config: list, rows: Table, model_args: tuple, samples: dict, output_dir: str
+    config: list, rows: Table, model_args: tuple, samples: dict, output_dir: str,
+    extras: dict = None,
 ) -> None:
     """
     Plot the results of the sampling.
@@ -858,6 +859,40 @@ def plotResults(
             f'$b_{{\\rm abs}} = {bqs[1]:.0f}^{{+{bqs[2]-bqs[1]:.0f}}}_{{-{bqs[1]-bqs[0]:.0f}}}$ km/s\n'
             f'$\\Delta v_{{\\rm abs}} = {vqs[1]:.0f}^{{+{vqs[2]-vqs[1]:.0f}}}_{{-{vqs[1]-vqs[0]:.0f}}}$ km/s'
         )
+
+        # Add WAIC and dWAIC if available
+        waic_abs = extras.get('WAIC', np.nan) if extras else np.nan
+        if np.isfinite(waic_abs):
+            # Try to find the no-absorption WAIC from a sibling output directory
+            root = rows[0]['root']
+            srcid = rows[0]['srcid']
+            noabs_name = cname.replace('_abs', '').lstrip('_') or 'broad'
+            noabs_summary = os.path.join(
+                output_dir, 'Results', f'{root}-{srcid}_{noabs_name}_summary.csv'
+            )
+            # Also check sibling directory (e.g. out_taylor_blagn vs out_taylor_blagn_abs)
+            if not os.path.exists(noabs_summary):
+                parent = output_dir.rstrip('/')
+                if parent.endswith('_abs'):
+                    sibling_dir = parent[:-4]
+                    noabs_summary = os.path.join(
+                        sibling_dir, 'Results', f'{root}-{srcid}_{noabs_name}_summary.csv'
+                    )
+
+            dwaic = np.nan
+            if os.path.exists(noabs_summary):
+                try:
+                    df_ref = pd.read_csv(noabs_summary, index_col=0)
+                    if 'WAIC' in df_ref.index:
+                        waic_noabs = float(df_ref.loc['WAIC', 'P50'])
+                        dwaic = waic_abs - waic_noabs
+                except Exception:
+                    pass
+
+            abs_text += f'\nWAIC = {waic_abs:.1f}'
+            if np.isfinite(dwaic):
+                abs_text += f'\n$\\Delta$WAIC = {dwaic:.1f}'
+
         fig.text(
             0.98, 0.98, abs_text,
             ha='right', va='top', fontsize=9,
