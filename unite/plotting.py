@@ -183,7 +183,7 @@ def plotLines(ax, config, model_args) -> None:
     """
 
     # Unpack model arguements
-    spectra, _, _, _, _, _, _ = model_args
+    spectra = model_args[0]
     oneplusz = 1 + spectra.redshift_initial
 
     # Get axis xlim and ylim

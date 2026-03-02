@@ -17,7 +17,7 @@ from numpyro import plate, sample, deterministic as determ, distributions as dis
 
 # unite
 from unite.spectra import Spectra
-from unite import priors, optimized, defaults
+from unite import priors, optimized, defaults, absorption
 from unite.calibration import NIRSpecCalibration
 
 # Speed of light
@@ -33,6 +33,7 @@ def multiSpecModel(
     line_estimates_eq: jnp.ndarray,
     cont_regs: jnp.ndarray,
     cont_guesses: jnp.ndarray,
+    absorption_enabled: bool = False,
 ) -> None:
     """
     Multi-Spectrum Model
@@ -134,6 +135,12 @@ def multiSpecModel(
     ).sum(1)
     determ('ew_all', fluxes / (linecont * oneplusz))
 
+    # Sample absorption parameters if enabled
+    if absorption_enabled:
+        log_NHI = sample('log_NHI', dist.Uniform(10.0, 20.0))
+        b_abs = sample('b_abs', dist.Uniform(10.0, 3000.0))
+        delta_v_abs = sample('delta_v_abs', dist.Uniform(-1500.0, 1500.0))
+
     # Loop over spectra
     for spectrum in spectra.spectra:
         # Get the spectrum
@@ -172,10 +179,16 @@ def multiSpecModel(
             ).sum(1),
         )
 
-        # Compute model
-        model = determ(
-            f'{spectrum.name}_model', flux_scale * (lines.sum(1) + continuum)
-        )
+        # Compute model (with optional absorption)
+        emission = lines.sum(1) + continuum
+        if absorption_enabled:
+            trans = absorption.balmer_transmission(
+                wave, spectra.redshift_initial, log_NHI, b_abs, delta_v_abs
+            )
+            determ(f'{spectrum.name}_transmission', trans)
+            model = determ(f'{spectrum.name}_model', flux_scale * emission * trans)
+        else:
+            model = determ(f'{spectrum.name}_model', flux_scale * emission)
 
         # Compute likelihood
         sample(f'{spectrum.name}', dist.Normal(model, err), obs=flux)

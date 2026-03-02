@@ -116,6 +116,9 @@ def NIRSpecModelArgs(config: dict, rows: Table, spectra_directory: str) -> Tuple
     if len(spectra.spectra) == 0:
         raise ValueError('No Valid Data')
 
+    # Check if absorption is enabled
+    absorption_enabled = config.get('BalmerAbsorption', False)
+
     # Model Args
     return config, (
         spectra,
@@ -125,6 +128,7 @@ def NIRSpecModelArgs(config: dict, rows: Table, spectra_directory: str) -> Tuple
         line_estimates_eq,
         cont_regs,
         cont_guesses,
+        absorption_enabled,
     )
 
 
@@ -326,7 +330,7 @@ def saveResults(config, rows, model_args, samples, extras, output_dir) -> None:
     savename = f'{output_dir}/Results/{rows[0]["root"]}-{rows[0]["srcid"]}{cname}'
 
     # Unpack model args
-    spectra, _, _, _, _, cont_regs, _ = model_args
+    spectra, _, _, _, _, cont_regs, _, absorption_enabled = model_args
 
     # Correct sample units
     samples['flux_all'] = samples['flux_all'] * (spectra.fλ_unit * spectra.λ_unit).to(
@@ -344,6 +348,11 @@ def saveResults(config, rows, model_args, samples, extras, output_dir) -> None:
         for n in ['lsf_scale', 'PRISM_flux', 'PRISM_offset', 'logL', 'logP']
         if n in samples.keys()
     ]
+    # Add absorption parameters if enabled
+    if absorption_enabled:
+        for abs_col in ['log_NHI', 'b_abs', 'delta_v_abs']:
+            if abs_col in samples:
+                colnames.append(abs_col)
     out = Table([samples[name] for name in colnames], names=colnames)
 
     # Add continuum regions and error scales to samples
@@ -358,14 +367,28 @@ def saveResults(config, rows, model_args, samples, extras, output_dir) -> None:
     # Save all samples as npz
     np.savez(f'{savename}_full.npz', **samples)
 
-    # Get names of the lines
-    # TODO: Better sanitization of line names?
+    # Get names of the lines with consistent naming: Species_Wavelength_ComponentType
+    # Rename 'emission' to 'narrow' for clarity
+    def normalize_linetype(lt):
+        """Normalize line type names for consistency."""
+        if lt in ['emission', 'narrow']:
+            return 'narrow'
+        return lt
+    
     line_names = [
         re.sub(
             r'[\[\]]',
             '',
-            f'{species["Name"]}_{species["LineType"]}_{line["Wavelength"]}',
+            f'{species["Name"]}_{line["Wavelength"]}_{normalize_linetype(species["LineType"])}',
         )
+        for _, group in config['Groups'].items()
+        for species in group['Species']
+        for line in species['Lines']
+    ]
+    
+    # Also store the normalized line types for grouping later
+    line_types = [
+        normalize_linetype(species["LineType"])
         for _, group in config['Groups'].items()
         for species in group['Species']
         for line in species['Lines']
@@ -390,28 +413,30 @@ def saveResults(config, rows, model_args, samples, extras, output_dir) -> None:
     flux_data = np.array(samples['flux_all'].T.tolist())
     
     # Parse line names to extract (species, wavelength) pairs
+    # Format is now: "Species_Wavelength_ComponentType"
     line_groups = {}
     for idx, line_name in enumerate(line_names):
-        # Format: "Species_LineType_Wavelength"
-        parts = line_name.rsplit('_', 2)
-        if len(parts) == 3:
-            species, linetype, wavelength = parts
-            key = f'{species}_{wavelength}'
+        # Format: "Species_Wavelength_ComponentType"
+        parts = line_name.rsplit('_', 1)  # Split from right, get last part as component type
+        if len(parts) == 2:
+            species_wavelength, linetype = parts
+            key = species_wavelength  # Already in format "Species_Wavelength"
             if key not in line_groups:
                 line_groups[key] = {'narrow': [], 'broad': [], 'other': []}
             
             # Categorize by line type
-            if linetype in ['emission', 'narrow']:
+            if linetype == 'narrow':
                 line_groups[key]['narrow'].append(idx)
             elif linetype == 'broad':
                 line_groups[key]['broad'].append(idx)
             else:
                 line_groups[key]['other'].append(idx)
     
-    # Compute total and narrow fluxes for each unique line
+    # Compute total, narrow, and broad fluxes for each unique line
     flux_unit = u.Unit(1e-20 * u.erg / u.cm**2 / u.s)
     total_flux_cols = []
     narrow_flux_cols = []
+    broad_flux_cols = []
     
     for key, indices in sorted(line_groups.items()):
         narrow_indices = indices['narrow']
@@ -419,10 +444,15 @@ def saveResults(config, rows, model_args, samples, extras, output_dir) -> None:
         other_indices = indices['other']
         all_indices = narrow_indices + broad_indices + other_indices
         
-        # Compute narrow flux (sum of all narrow/emission components)
+        # Compute narrow flux (sum of all narrow components)
         if narrow_indices:
             narrow_flux = np.sum(flux_data[narrow_indices, :], axis=0) * flux_unit
             narrow_flux_cols.append((f'{key}_narrow_flux', narrow_flux))
+        
+        # Compute broad flux (sum of all broad components)
+        if broad_indices:
+            broad_flux = np.sum(flux_data[broad_indices, :], axis=0) * flux_unit
+            broad_flux_cols.append((f'{key}_broad_flux', broad_flux))
         
         # Compute total flux (narrow + broad + other) if there are multiple components
         if len(all_indices) > 1:
@@ -432,23 +462,100 @@ def saveResults(config, rows, model_args, samples, extras, output_dir) -> None:
     # Add narrow flux columns
     if narrow_flux_cols:
         narrow_names = [col[0] for col in narrow_flux_cols]
-        # Extract values and units - each col[1] is a Quantity with shape (n_samples,)
         narrow_values = [col[1].value for col in narrow_flux_cols]
-        narrow_unit = narrow_flux_cols[0][1].unit  # Get unit from first column
-        # Stack arrays: shape will be (n_columns, n_samples), then transpose to (n_samples, n_columns)
+        narrow_unit = narrow_flux_cols[0][1].unit
         narrow_data = np.array(narrow_values).T * narrow_unit
         out_part = Table(narrow_data, names=narrow_names)
+        out = hstack([out, out_part])
+    
+    # Add broad flux columns
+    if broad_flux_cols:
+        broad_names = [col[0] for col in broad_flux_cols]
+        broad_values = [col[1].value for col in broad_flux_cols]
+        broad_unit = broad_flux_cols[0][1].unit
+        broad_data = np.array(broad_values).T * broad_unit
+        out_part = Table(broad_data, names=broad_names)
         out = hstack([out, out_part])
     
     # Add total flux columns
     if total_flux_cols:
         total_names = [col[0] for col in total_flux_cols]
-        # Extract values and units - each col[1] is a Quantity with shape (n_samples,)
         total_values = [col[1].value for col in total_flux_cols]
-        total_unit = total_flux_cols[0][1].unit  # Get unit from first column
-        # Stack arrays: shape will be (n_columns, n_samples), then transpose to (n_samples, n_columns)
+        total_unit = total_flux_cols[0][1].unit
         total_data = np.array(total_values).T * total_unit
         out_part = Table(total_data, names=total_names)
+        out = hstack([out, out_part])
+    
+    # Compute total FWHM for multi-component lines
+    # For each unique line (e.g., HI_6564.61), compute combined profile FWHM
+    # Method: Create combined profile, treat as PDF, compute σ_eff = (P84 - P16)/2, FWHM = 2.35*σ_eff
+    fwhm_data = np.array(samples['fwhm_all'].T.tolist())  # Shape: (n_lines, n_samples)
+    total_fwhm_cols = []
+    
+    for key, indices in sorted(line_groups.items()):
+        all_indices = indices['narrow'] + indices['broad'] + indices['other']
+        
+        # Only compute total FWHM if there are multiple components
+        if len(all_indices) > 1:
+            n_samples = flux_data.shape[1]
+            total_fwhm_samples = np.zeros(n_samples)
+            
+            for sample_idx in range(n_samples):
+                # Get flux and FWHM for each component in this sample
+                component_fluxes = flux_data[all_indices, sample_idx]
+                component_fwhms = fwhm_data[all_indices, sample_idx]  # in km/s
+                
+                # Skip if total flux is zero or negative
+                total_flux = np.sum(component_fluxes)
+                if total_flux <= 0:
+                    total_fwhm_samples[sample_idx] = np.nan
+                    continue
+                
+                # Normalize fluxes to get weights (treat combined profile as PDF)
+                weights = component_fluxes / total_flux
+                
+                # Create velocity grid (centered at 0, range based on max FWHM)
+                max_fwhm = np.max(component_fwhms)
+                v_range = 5 * max_fwhm  # Go out to 5x max FWHM
+                v_grid = np.linspace(-v_range, v_range, 1001)
+                dv = v_grid[1] - v_grid[0]
+                
+                # Build combined profile as sum of Gaussians
+                # Each component is a Gaussian centered at 0 (assuming same redshift)
+                combined_profile = np.zeros_like(v_grid)
+                for comp_idx, (w, fwhm_kms) in enumerate(zip(weights, component_fwhms)):
+                    if w > 0 and fwhm_kms > 0:
+                        sigma = fwhm_kms / 2.355  # Convert FWHM to sigma
+                        gaussian = np.exp(-0.5 * (v_grid / sigma)**2)
+                        gaussian /= (gaussian.sum() * dv)  # Normalize to integrate to 1
+                        combined_profile += w * gaussian
+                
+                # Normalize combined profile to integrate to 1
+                combined_profile /= (combined_profile.sum() * dv)
+                
+                # Compute CDF
+                cdf = np.cumsum(combined_profile) * dv
+                
+                # Find 16th, 50th, 84th percentile velocities
+                v_16 = np.interp(0.16, cdf, v_grid)
+                v_50 = np.interp(0.50, cdf, v_grid)
+                v_84 = np.interp(0.84, cdf, v_grid)
+                
+                # Compute effective sigma and FWHM
+                sigma_eff = (v_84 - v_16) / 2
+                fwhm_total = 2.355 * sigma_eff
+                
+                total_fwhm_samples[sample_idx] = fwhm_total
+            
+            total_fwhm_cols.append((f'{key}_total_fwhm', total_fwhm_samples * (u.km / u.s)))
+    
+    # Add total FWHM columns
+    if total_fwhm_cols:
+        fwhm_names = [col[0] for col in total_fwhm_cols]
+        fwhm_values = [col[1].value for col in total_fwhm_cols]
+        fwhm_unit = total_fwhm_cols[0][1].unit
+        fwhm_data_arr = np.array(fwhm_values).T * fwhm_unit
+        out_part = Table(fwhm_data_arr, names=fwhm_names)
         out = hstack([out, out_part])
 
     # Append LSF samples
@@ -525,7 +632,7 @@ def plotResults(
     os.makedirs(f'{output_dir}/Plots/', exist_ok=True)
 
     # Unpack model arguements
-    spectra, _, _, line_centers, _, cont_regs, _ = model_args
+    spectra, _, _, line_centers, _, cont_regs, _, absorption_enabled = model_args
 
     # Get the number of spectra and regions
     Nspec, Nregs = len(spectra.spectra), len(cont_regs)
@@ -669,6 +776,20 @@ def plotResults(
                 zorder=8
             )
             
+            # Overlay transmission curve if absorption is enabled
+            trans_key = f'{spectrum.name}_transmission'
+            if absorption_enabled and trans_key in samples:
+                trans_median = np.median(samples[trans_key], axis=0)
+                ax2 = ax.twinx()
+                ax2.plot(
+                    wave[mask], trans_median[mask],
+                    color='purple', alpha=0.7, lw=1.5,
+                    linestyle='-', label='Transmission'
+                )
+                ax2.set_ylim(-0.05, 1.15)
+                ax2.set_ylabel('T(λ)', color='purple', fontsize=9)
+                ax2.tick_params(axis='y', labelcolor='purple', labelsize=8)
+
             # Add legend for first subplot
             if i == 0 and j == 0:
                 ax.legend(loc='upper right', fontsize=8, framealpha=0.9)
