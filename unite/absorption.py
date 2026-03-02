@@ -17,8 +17,10 @@ C_CGS: Final[float] = 2.99792458e10  # speed of light (cm/s)
 C_KMS: Final[float] = 2.99792458e5  # speed of light (km/s)
 
 # Balmer line constants: (rest wavelength Å, oscillator strength, damping rate s⁻¹)
-HALPHA: Final[tuple] = (6564.61, 0.6407, 6.27e8)
-HBETA: Final[tuple] = (4862.68, 0.1193, 2.53e8)
+# γ = γ(n=2) + γ(n_upper), where γ(n) = Σ A(n→j) for all j < n
+# γ(n=2) = 6.2649e8, γ(n=3) = 2.1135e8, γ(n=4) = 8.5585e7
+HALPHA: Final[tuple] = (6564.61, 0.6407, 8.378e8)
+HBETA: Final[tuple] = (4862.68, 0.1193, 7.121e8)
 
 
 @jit
