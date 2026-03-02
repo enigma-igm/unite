@@ -137,8 +137,8 @@ def multiSpecModel(
 
     # Sample absorption parameters if enabled
     if absorption_enabled:
-        log_NHI = sample('log_NHI', dist.Uniform(10.0, 20.0))
-        b_abs = sample('b_abs', dist.Uniform(10.0, 3000.0))
+        log_NHI = sample('log_NHI', dist.Uniform(10.0, 18.0))
+        b_abs = sample('b_abs', dist.Uniform(10.0, 500.0))
         delta_v_abs = sample('delta_v_abs', dist.Uniform(-1500.0, 1500.0))
 
     # Loop over spectra
