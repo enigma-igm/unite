@@ -1,12 +1,15 @@
 """
 Balmer Absorption Module
 
-Computes Voigt absorption profiles for HI Balmer lines (Hα, Hβ)
+Computes Voigt absorption profiles for HI Balmer lines
 using the Humlicek (1982) W4 rational approximation to the Faddeeva function.
 All functions are JAX-JITable.
+
+Includes full Balmer series (up to n=50) and bound-free continuum
+for post-fit transmission modelling.
 """
 
-from typing import Final
+from typing import Final, List, Tuple
 
 from jax import jit, numpy as jnp
 
@@ -16,11 +19,58 @@ ME_CGS: Final[float] = 9.1093837e-28  # electron mass (g)
 C_CGS: Final[float] = 2.99792458e10  # speed of light (cm/s)
 C_KMS: Final[float] = 2.99792458e5  # speed of light (km/s)
 
+# Rydberg constant for hydrogen (cm⁻¹)
+R_H: Final[float] = 1.09677583e5
+
 # Balmer line constants: (rest wavelength Å, oscillator strength, damping rate s⁻¹)
 # γ = γ(n=2) + γ(n_upper), where γ(n) = Σ A(n→j) for all j < n
 # γ(n=2) = 6.2649e8, γ(n=3) = 2.1135e8, γ(n=4) = 8.5585e7
 HALPHA: Final[tuple] = (6564.61, 0.6407, 8.378e8)
 HBETA: Final[tuple] = (4862.68, 0.1193, 7.121e8)
+
+# Balmer series limit (Å) and bound-free cross-section at threshold (cm²)
+BALMER_LIMIT: Final[float] = 4.0 / R_H * 1e8  # ≈ 3647 Å
+SIGMA_BF_BALMER: Final[float] = 1.26e-17
+
+# Tabulated oscillator strengths for Balmer series n=3..20 (NIST / Wiese et al.)
+_BALMER_FOSC = {
+    3: 0.6407, 4: 0.1193, 5: 0.04467, 6: 0.02209,
+    7: 0.01270, 8: 0.008036, 9: 0.005429, 10: 0.003862,
+    11: 0.002851, 12: 0.002174, 13: 0.001695, 14: 0.001346,
+    15: 0.001088, 16: 0.000893, 17: 0.000742, 18: 0.000624,
+    19: 0.000530, 20: 0.000454,
+}
+
+
+def balmer_line_data(n_max: int = 50) -> List[Tuple[float, float, float]]:
+    """
+    Return Balmer line data (λ_rest, f_osc, γ) for n=3 to n_max.
+
+    Wavelengths from Rydberg formula. Oscillator strengths from NIST for
+    n ≤ 20, extrapolated as f ∝ n⁻³ for n > 20.  Damping rates use known
+    values for Hα/Hβ; for n ≥ 5, γ ≈ γ(n=2) since A_total(n) is small.
+    """
+    lines = []
+    for n in range(3, n_max + 1):
+        # Wavelength (Å)
+        lam = 1e8 / (R_H * (0.25 - 1.0 / n**2))
+
+        # Oscillator strength
+        if n in _BALMER_FOSC:
+            f = _BALMER_FOSC[n]
+        else:
+            f = _BALMER_FOSC[20] * (20.0 / n) ** 3
+
+        # Damping constant
+        if n == 3:
+            gamma = 8.378e8
+        elif n == 4:
+            gamma = 7.121e8
+        else:
+            gamma = 6.265e8  # dominated by γ(n=2) for n ≥ 5
+
+        lines.append((lam, f, gamma))
+    return lines
 
 
 @jit
@@ -175,3 +225,45 @@ def balmer_transmission(wave_obs, z_source, log_NHI, b_abs_kms, delta_v_kms):
     transmission = jnp.exp(-tau)
 
     return transmission
+
+
+def full_balmer_transmission(wave_obs, z_source, log_NHI, b_abs_kms, delta_v_kms,
+                             n_max=50):
+    """
+    Full Balmer transmission: lines n=3..n_max plus bound-free continuum.
+
+    Uses a Python loop over lines so NOT suited for JIT / MCMC.
+    Intended for post-fit plotting with fixed parameters.
+
+    Parameters
+    ----------
+    wave_obs : array
+        Observed wavelength (Å).
+    z_source, log_NHI, b_abs_kms, delta_v_kms : float
+        Same as ``balmer_transmission``.
+    n_max : int
+        Highest Balmer line to include (default 50).
+
+    Returns
+    -------
+    jnp.ndarray
+        Transmission T(λ).
+    """
+    NHI = 10.0 ** log_NHI
+    z_abs = (1 + z_source) * (1 + delta_v_kms / C_KMS) - 1
+
+    # Bound-bound lines
+    total_sigma = jnp.zeros_like(wave_obs)
+    for lam_rest, f_osc, gamma in balmer_line_data(n_max):
+        center_obs = lam_rest * (1 + z_abs)
+        sigma = voigt_cross_section(wave_obs, center_obs, b_abs_kms, gamma, f_osc)
+        total_sigma = total_sigma + sigma
+
+    # Bound-free: photoionization from n=2
+    lam_limit_obs = BALMER_LIMIT * (1 + z_abs)
+    bf_sigma = SIGMA_BF_BALMER * (wave_obs / lam_limit_obs) ** 3
+    bf_sigma = jnp.where(wave_obs <= lam_limit_obs, bf_sigma, 0.0)
+    total_sigma = total_sigma + bf_sigma
+
+    tau = NHI * total_sigma
+    return jnp.exp(-tau)
