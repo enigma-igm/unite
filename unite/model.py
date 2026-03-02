@@ -182,8 +182,10 @@ def multiSpecModel(
         # Compute model (with optional absorption)
         emission = lines.sum(1) + continuum
         if absorption_enabled:
+            # Convert wave to Angstroms (absorption code uses Angstroms internally)
+            wave_aa = wave * spectra.λ_unit.to(u.AA)
             trans = absorption.balmer_transmission(
-                wave, spectra.redshift_initial, log_NHI, b_abs, delta_v_abs
+                wave_aa, spectra.redshift_initial, log_NHI, b_abs, delta_v_abs
             )
             determ(f'{spectrum.name}_transmission', trans)
             model = determ(f'{spectrum.name}_model', flux_scale * emission * trans)
