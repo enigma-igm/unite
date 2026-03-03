@@ -231,7 +231,9 @@ def load_and_plot(srcid, data_dir, output_dir, label='broad_abs',
             rest_ax.set_xlabel('Rest wavelength (μm)', fontsize=10)
 
     fig.subplots_adjust(hspace=0.35, top=0.90, bottom=0.08, left=0.08, right=0.92)
-    outpath = os.path.join(output_dir, 'Plots', f'{root}-{srcid}_{label}_full.png')
+    plot_subdir = os.path.join(output_dir, 'Plots', f'{label}_full')
+    os.makedirs(plot_subdir, exist_ok=True)
+    outpath = os.path.join(plot_subdir, f'{root}-{srcid}_{label}_full.png')
     fig.savefig(outpath, dpi=150, bbox_inches='tight')
     plt.close(fig)
     print(f'Saved: {outpath}')

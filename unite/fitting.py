@@ -630,7 +630,8 @@ def plotResults(
     # Get config name
     cname = '_' + config['Name'] if config['Name'] else ''
 
-    os.makedirs(f'{output_dir}/Plots/', exist_ok=True)
+    plot_subdir = os.path.join(output_dir, 'Plots', config['Name'] or 'default')
+    os.makedirs(plot_subdir, exist_ok=True)
 
     # Unpack model arguements
     spectra, _, _, line_centers, _, cont_regs, _, absorption_enabled = model_args
@@ -903,7 +904,7 @@ def plotResults(
     # Show the plot
     fig.savefig(
         os.path.join(
-            f'{output_dir}/Plots',
+            plot_subdir,
             f'{rows[0]["root"]}-{rows[0]["srcid"]}{cname}_fit.png',
         ),
         dpi=300,
