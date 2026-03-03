@@ -87,6 +87,31 @@ def load_and_plot(srcid, data_dir, output_dir, label='broad_abs',
         print(f'Absorption params: logN={logN:.2f} [{logN_16:.2f}, {logN_84:.2f}], '
               f'b={b_abs:.0f} km/s, dv={dv_abs:.0f} km/s')
 
+    # Load WAIC from summary and compute dWAIC
+    waic_abs = np.nan
+    dwaic = np.nan
+    summary_fits = os.path.join(output_dir, 'Results', f'{root}-{srcid}_{label}_summary.fits')
+    if os.path.exists(summary_fits):
+        try:
+            extras = Table.read(summary_fits, hdu='EXTRAS')
+            if 'WAIC' in extras.colnames:
+                waic_abs = float(extras['WAIC'][0])
+        except Exception:
+            pass
+    if np.isfinite(waic_abs):
+        # Look for no-absorption WAIC
+        noabs_label = label.replace('_abs', '').lstrip('_') or 'broad'
+        noabs_fits = os.path.join(
+            output_dir, 'Results', f'{root}-{srcid}_{noabs_label}_summary.fits'
+        )
+        if os.path.exists(noabs_fits):
+            try:
+                extras_noabs = Table.read(noabs_fits, hdu='EXTRAS')
+                if 'WAIC' in extras_noabs.colnames:
+                    dwaic = waic_abs - float(extras_noabs['WAIC'][0])
+            except Exception:
+                pass
+
     # Key Balmer line positions (rest frame, Angstrom -> micron)
     balmer_marks = [
         (6564.61 / 1e4, r'H$\alpha$'),
@@ -192,15 +217,18 @@ def load_and_plot(srcid, data_dir, output_dir, label='broad_abs',
     if has_abs:
         title += (f'  |  log N_HI={logN:.2f}, '
                   f'b={b_abs:.0f} km/s, Δv={dv_abs:.0f} km/s')
+        if np.isfinite(dwaic):
+            title += f'  |  ΔWAIC={dwaic:.1f}'
     fig.suptitle(title, fontsize=12, y=1.02)
 
-    # Rest frame axis on top subplot
-    ax_top = axes[0]
-    rest_ax = ax_top.secondary_xaxis(
-        'top',
-        functions=(lambda x: x / (1 + z), lambda x: x * (1 + z)),
-    )
-    rest_ax.set_xlabel('Rest wavelength (μm)', fontsize=10)
+    # Rest frame axis on every panel (label only top one)
+    for i, ax in enumerate(axes):
+        rest_ax = ax.secondary_xaxis(
+            'top',
+            functions=(lambda x: x / (1 + z), lambda x: x * (1 + z)),
+        )
+        if i == 0:
+            rest_ax.set_xlabel('Rest wavelength (μm)', fontsize=10)
 
     fig.subplots_adjust(hspace=0.35, top=0.90, bottom=0.08, left=0.08, right=0.92)
     outpath = os.path.join(output_dir, 'Plots', f'{root}-{srcid}_{label}_full.png')
