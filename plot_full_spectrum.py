@@ -104,8 +104,10 @@ def load_and_plot(srcid, data_dir, output_dir, label='broad_abs',
 
     for i, spectrum in enumerate(spectra.spectra):
         ax = axes[i]
-        _, wave, _, flux, err = spectrum()
+        low, wave, high, flux, err = spectrum()
+        low = np.array(low)
         wave = np.array(wave)
+        high = np.array(high)
         flux = np.array(flux)
         err = np.array(err)
 
@@ -142,13 +144,23 @@ def load_and_plot(srcid, data_dir, output_dir, label='broad_abs',
                     lw=1, ls='--', label='Continuum', zorder=4)
 
         # Plot full transmission (all Balmer lines + b-f) on twin axis
+        # Compute on a fine grid and bin-average onto pixel grid to avoid
+        # aliasing on coarse pixels (especially PRISM)
         if has_abs:
-            wave_aa = jnp.array(wave) * um_to_aa
-            T_med = np.array(full_balmer_transmission(
-                wave_aa, z, logN, b_abs, dv_abs, n_max=50))
+            n_sub = 20  # sub-pixel samples per pixel
+            # Build fine grid: n_sub points within each pixel
+            fine_wave = np.concatenate([
+                np.linspace(lo, hi, n_sub, endpoint=False)
+                for lo, hi in zip(low, high)
+            ])
+            fine_aa = jnp.array(fine_wave) * um_to_aa
+            T_fine = np.array(full_balmer_transmission(
+                fine_aa, z, logN, b_abs, dv_abs, n_max=50))
+            # Bin-average: reshape to (n_pixels, n_sub) and mean
+            T_pixel = T_fine.reshape(len(wave), n_sub).mean(axis=1)
 
             ax2 = ax.twinx()
-            ax2.step(wave, T_med, where='mid', color='purple', lw=1.5, alpha=0.8,
+            ax2.step(wave, T_pixel, where='mid', color='purple', lw=1.5, alpha=0.8,
                      label='Transmission')
             ax2.set_ylim(-0.05, 1.15)
             ax2.set_ylabel('T(λ)', color='purple', fontsize=10)
