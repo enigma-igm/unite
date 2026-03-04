@@ -41,30 +41,30 @@ DWAIC = -48.7     # absorption model preferred
 
 # Line wavelengths in vacuum Angstroms (rest frame)
 BALMER_LINES = {
-    r'H$\alpha$': 6564.61,
-    r'H$\beta$': 4862.68,
-    r'H$\gamma$': 4341.68,
-    r'H$\delta$': 4102.89,
+    r'$\rm H\alpha$': 6564.61,
+    r'$\rm H\beta$': 4862.68,
+    r'$\rm H\gamma$': 4341.68,
+    r'$\rm H\delta$': 4102.89,
 }
 
 PASCHEN_LINES = {
-    r'Pa$\alpha$': 18756.1,
-    r'Pa$\beta$': 12821.6,
-    r'Pa$\gamma$': 10941.1,
-    r'Pa$\delta$': 10052.1,
-    r'Pa$\epsilon$': 9546.0,
-    r'Pa 9': 9229.0,
-    r'Pa 10': 9015.0,
+    r'$\rm Pa\alpha$': 18756.1,
+    r'$\rm Pa\beta$': 12821.6,
+    r'$\rm Pa\gamma$': 10941.1,
+    r'$\rm Pa\delta$': 10052.1,
+    r'$\rm Pa\epsilon$': 9546.0,
+    r'$\rm Pa\,9$': 9229.0,
+    r'$\rm Pa\,10$': 9015.0,
 }
 
 HELIUM_LINES = {
-    r'HeI 10833': 10833.0,
-    r'HeI 5877': 5877.0,
+    r'$\rm HeI\,10833$': 10833.0,
+    r'$\rm HeI\,5877$': 5877.0,
 }
 
 FORBIDDEN_LINES = {
-    r'[OIII]': 5008.24,
-    r'[NII]': 6585.27,
+    r'$\rm [OIII]$': 5008.24,
+    r'$\rm [NII]$': 6585.27,
 }
 
 # Colors per grating
@@ -79,8 +79,28 @@ GRATING_COLORS = {
 # Helpers
 # =============================================================================
 
+C_AA_S = 2.99792458e18  # speed of light in Angstrom/s
+FLAM_UNIT = 1e-20       # plot in units of 1e-20 erg/s/cm2/A
+
+
+def fnu_to_flam(wave_um, fnu_ujy):
+    """Convert f_nu (microJy) to f_lambda (1e-20 erg/s/cm2/A).
+
+    f_lambda = f_nu * c / lambda^2
+    with f_nu in erg/s/cm2/Hz (1 uJy = 1e-29) and lambda in Angstrom.
+    """
+    wave_aa = wave_um * 1e4
+    # fnu [erg/s/cm2/Hz] = fnu_ujy * 1e-29
+    # flam [erg/s/cm2/A] = fnu * c / lam^2
+    # flam / 1e-20 = fnu_ujy * 1e-29 * c / lam^2 / 1e-20
+    return fnu_ujy * 1e-29 * C_AA_S / wave_aa**2 / FLAM_UNIT
+
+
 def load_spectrum(grating):
-    """Load SPEC1D from a grating file. Returns (wave_um, flux_ujy, err_ujy)."""
+    """Load SPEC1D from a grating file. Returns (wave_um, flam, flam_err).
+
+    Flux is in units of 1e-20 erg/s/cm2/A.
+    """
     path = os.path.join(SPEC_DIR, SPEC_FILES[grating])
     spec = Table.read(path, 'SPEC1D')
     wave = np.array(spec['wave'])   # microns
@@ -88,7 +108,11 @@ def load_spectrum(grating):
     err = np.array(spec['err'])     # microJy
     # Mask bad pixels
     good = np.isfinite(flux) & np.isfinite(err) & (err > 0)
-    return wave[good], flux[good], err[good]
+    wave, flux, err = wave[good], flux[good], err[good]
+    # Convert to f_lambda
+    flam = fnu_to_flam(wave, flux)
+    flam_err = fnu_to_flam(wave, err)
+    return wave, flam, flam_err
 
 
 def mark_lines(ax, lines, z, color, ls='--', alpha=0.6, ytext=None,
@@ -128,10 +152,13 @@ def main():
 
     # ---- Figure layout ----
     plt.rcParams.update({
+        'text.usetex': True,
+        'axes.linewidth': 2,
         'font.family': 'serif',
-        'font.size': 12,
-        'axes.linewidth': 1.2,
+        'font.weight': 'heavy',
+        'font.size': 16,
     })
+    plt.rcParams['text.latex.preamble'] = r'\usepackage{amsmath} \usepackage{bm} \boldmath'
 
     fig = plt.figure(figsize=(16, 12), constrained_layout=True)
     gs = fig.add_gridspec(2, 3, height_ratios=[1.2, 1])
@@ -154,41 +181,48 @@ def main():
     ax_rest = ax_full.twiny()
     x1, x2 = ax_full.get_xlim()
     ax_rest.set_xlim(x1 * 1e4 / (1 + Z), x2 * 1e4 / (1 + Z))
-    ax_rest.set_xlabel(r'Rest wavelength ($\AA$)', fontsize=12)
+    ax_rest.set_xlabel(r'$\rm Rest~wavelength~(\AA)$', fontsize=16)
 
     # Mark lines on full spectrum
-    mark_lines(ax_full, BALMER_LINES, Z, 'red', ls='--', fontsize=9, offset_idx=0)
-    mark_lines(ax_full, PASCHEN_LINES, Z, 'blue', ls='-.', fontsize=9, offset_idx=1)
-    mark_lines(ax_full, HELIUM_LINES, Z, 'green', ls=':', fontsize=9, offset_idx=2)
-    mark_lines(ax_full, FORBIDDEN_LINES, Z, 'gray', ls=':', fontsize=8, alpha=0.4,
+    mark_lines(ax_full, BALMER_LINES, Z, 'red', ls='--', fontsize=10, offset_idx=0)
+    mark_lines(ax_full, PASCHEN_LINES, Z, 'blue', ls='-.', fontsize=10, offset_idx=1)
+    mark_lines(ax_full, HELIUM_LINES, Z, 'green', ls=':', fontsize=10, offset_idx=2)
+    mark_lines(ax_full, FORBIDDEN_LINES, Z, 'gray', ls=':', fontsize=9, alpha=0.4,
                offset_idx=0)
 
-    ax_full.set_xlabel(r'Observed wavelength ($\mu$m)', fontsize=14)
-    ax_full.set_ylabel(r'Flux ($\mu$Jy)', fontsize=14)
+    FLAM_LABEL = r'$f_\lambda~[\rm 10^{-20}~erg\,s^{-1}\,cm^{-2}\,\AA^{-1}]$'
+    ax_full.set_xlabel(r'$\rm Observed~wavelength~(\mu m)$', fontsize=18)
+    ax_full.set_ylabel(FLAM_LABEL, fontsize=16)
     ax_full.set_title(
-        f'bluejay-south-v4-12020  z={Z:.3f}  '
-        f'(log N(n=2)={LOG_NHI:.2f}, b={B_ABS:.0f} km/s, '
-        f'$\\Delta$WAIC={DWAIC:.0f})',
-        fontsize=13,
+        r'$\rm bluejay\text{-}south\text{-}v4\text{-}12020$'
+        rf'~~$z={Z:.3f}$'
+        rf'~~($\log\,N(n\!=\!2)={LOG_NHI:.2f}$,'
+        rf'~$b={B_ABS:.0f}~\rm km/s$,'
+        rf'~$\Delta\rm WAIC={DWAIC:.0f}$)',
+        fontsize=14,
     )
-    ax_full.legend(loc='upper right', fontsize=11)
+    ax_full.legend(loc='upper right', fontsize=13)
     ax_full.minorticks_on()
+    ax_full.tick_params(top=True, right=True, which='major',
+                        length=8, width=1.5, direction='in', pad=5)
+    ax_full.tick_params(top=True, right=True, which='minor',
+                        length=4, width=1, direction='in')
 
     # ---- Zoomed panels ----
     # Define zoom windows: (center_um, half_width_um, title, lines_dict)
     zoom_panels = [
         (ax_pad,
          (9650.0 * (1 + Z) / 1e4, 0.18),
-         r'Pa$\delta$ + Pa$\epsilon$ + Pa 9',
-         {r'Pa$\delta$': 10052.1, r'Pa$\epsilon$': 9546.0, r'Pa 9': 9229.0}),
+         r'$\rm Pa\delta + Pa\epsilon + Pa\,9$',
+         {r'$\rm Pa\delta$': 10052.1, r'$\rm Pa\epsilon$': 9546.0, r'$\rm Pa\,9$': 9229.0}),
         (ax_pag,
          (10941.1 * (1 + Z) / 1e4, 0.12),
-         r'Pa$\gamma$ + HeI 10833',
-         {r'Pa$\gamma$': 10941.1, r'HeI 10833': 10833.0}),
+         r'$\rm Pa\gamma + HeI\,10833$',
+         {r'$\rm Pa\gamma$': 10941.1, r'$\rm HeI\,10833$': 10833.0}),
         (ax_pab,
          (12821.6 * (1 + Z) / 1e4, 0.15),
-         r'Pa$\beta$',
-         {r'Pa$\beta$': 12821.6}),
+         r'$\rm Pa\beta$',
+         {r'$\rm Pa\beta$': 12821.6}),
     ]
 
     for ax, (center, hw), title, lines in zoom_panels:
@@ -227,12 +261,16 @@ def main():
         ax_r = ax.twiny()
         x1, x2 = ax.get_xlim()
         ax_r.set_xlim(x1 * 1e4 / (1 + Z), x2 * 1e4 / (1 + Z))
-        ax_r.set_xlabel(r'Rest $\lambda$ ($\AA$)', fontsize=10)
+        ax_r.set_xlabel(r'$\rm Rest~\lambda~(\AA)$', fontsize=12)
 
-        ax.set_title(title, fontsize=13)
-        ax.set_xlabel(r'Observed $\lambda$ ($\mu$m)', fontsize=11)
-        ax.set_ylabel(r'Flux ($\mu$Jy)', fontsize=11)
+        ax.set_title(title, fontsize=14)
+        ax.set_xlabel(r'$\rm Observed~\lambda~(\mu m)$', fontsize=13)
+        ax.set_ylabel(FLAM_LABEL, fontsize=11)
         ax.minorticks_on()
+        ax.tick_params(top=True, right=True, which='major',
+                       length=8, width=1.5, direction='in')
+        ax.tick_params(top=True, right=True, which='minor',
+                       length=4, width=1, direction='in')
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     outpath = os.path.join(OUTPUT_DIR, 'bluejay-south-v4-12020_paschen_absorption.png')
