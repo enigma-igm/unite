@@ -188,7 +188,7 @@ def main():
     ax_rest = ax_full.twiny()
     x1, x2 = ax_full.get_xlim()
     ax_rest.set_xlim(x1 * 1e4 / (1 + Z), x2 * 1e4 / (1 + Z))
-    ax_rest.set_xlabel(r'$\rm Rest~wavelength~(\AA)$', fontsize=16)
+    ax_rest.set_xlabel(r'$\rm Rest~wavelength~[\AA]$', fontsize=16)
 
     # Mark lines on full spectrum
     mark_lines(ax_full, BALMER_LINES, Z, 'red', ls='--', fontsize=10, offset_idx=0)
@@ -198,7 +198,7 @@ def main():
                offset_idx=0)
 
     FLAM_LABEL = r'$f_\lambda$ $[\rm 10^{-20}~erg\,s^{-1}\,cm^{-2}\,\AA^{-1}]$'
-    ax_full.set_xlabel(r'$\rm Observed~wavelength~(\mu m)$', fontsize=18)
+    ax_full.set_xlabel(r'$\rm Observed~wavelength~[\mu m]$', fontsize=18)
     ax_full.set_ylabel(FLAM_LABEL, fontsize=16)
     ax_full.set_title(
         r'$\rm bluejay\text{-}south\text{-}v4\text{-}12020$'
@@ -268,12 +268,11 @@ def main():
         ax_r = ax.twiny()
         x1, x2 = ax.get_xlim()
         ax_r.set_xlim(x1 * 1e4 / (1 + Z), x2 * 1e4 / (1 + Z))
-        ax_r.set_xlabel(r'$\rm Rest~\lambda~(\AA)$', fontsize=12)
+        ax_r.set_xlabel(r'$\rm Rest~\lambda~[\AA]$', fontsize=12)
 
         ax.set_title(title, fontsize=14)
-        ax.set_xlabel(r'$\rm Observed~\lambda~(\mu m)$', fontsize=13)
-        FLAM_SHORT = r'$f_\lambda$ $[\rm 10^{-20}~cgs~\AA^{-1}]$'
-        ax.set_ylabel(FLAM_SHORT, fontsize=12)
+        ax.set_xlabel(r'$\rm Observed~\lambda~[\mu m]$', fontsize=13)
+        ax.set_ylabel(FLAM_LABEL, fontsize=12)
         ax.minorticks_on()
         ax.tick_params(top=True, right=True, which='major',
                        length=8, width=1.5, direction='in')
