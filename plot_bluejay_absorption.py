@@ -160,8 +160,8 @@ def main():
     })
     plt.rcParams['text.latex.preamble'] = r'\usepackage{amsmath} \usepackage{bm} \boldmath'
 
-    fig = plt.figure(figsize=(16, 12), constrained_layout=True)
-    gs = fig.add_gridspec(2, 3, height_ratios=[1.2, 1])
+    fig = plt.figure(figsize=(16, 12))
+    gs = fig.add_gridspec(2, 3, height_ratios=[1.2, 1], hspace=0.45, wspace=0.3)
 
     # Top panel: full spectrum
     ax_full = fig.add_subplot(gs[0, :])
@@ -177,6 +177,13 @@ def main():
         ax_full.plot(w, f, color=color, lw=0.5, alpha=0.8, label=g)
         ax_full.fill_between(w, f - e, f + e, color=color, alpha=0.1)
 
+    # Tighten y-limits BEFORE marking lines so labels are positioned correctly
+    all_flam = np.concatenate([spectra[g][1] for g in spectra])
+    yhi = np.nanpercentile(all_flam, 99.5)
+    ylo = np.nanpercentile(all_flam, 0.5)
+    margin = 0.08 * (yhi - ylo)
+    ax_full.set_ylim(ylo - margin, yhi + margin)
+
     # Add rest-frame axis on top
     ax_rest = ax_full.twiny()
     x1, x2 = ax_full.get_xlim()
@@ -190,7 +197,7 @@ def main():
     mark_lines(ax_full, FORBIDDEN_LINES, Z, 'gray', ls=':', fontsize=9, alpha=0.4,
                offset_idx=0)
 
-    FLAM_LABEL = r'$f_\lambda~[\rm 10^{-20}~erg\,s^{-1}\,cm^{-2}\,\AA^{-1}]$'
+    FLAM_LABEL = r'$f_\lambda$ $[\rm 10^{-20}~erg\,s^{-1}\,cm^{-2}\,\AA^{-1}]$'
     ax_full.set_xlabel(r'$\rm Observed~wavelength~(\mu m)$', fontsize=18)
     ax_full.set_ylabel(FLAM_LABEL, fontsize=16)
     ax_full.set_title(
@@ -265,7 +272,8 @@ def main():
 
         ax.set_title(title, fontsize=14)
         ax.set_xlabel(r'$\rm Observed~\lambda~(\mu m)$', fontsize=13)
-        ax.set_ylabel(FLAM_LABEL, fontsize=11)
+        FLAM_SHORT = r'$f_\lambda$ $[\rm 10^{-20}~cgs~\AA^{-1}]$'
+        ax.set_ylabel(FLAM_SHORT, fontsize=12)
         ax.minorticks_on()
         ax.tick_params(top=True, right=True, which='major',
                        length=8, width=1.5, direction='in')
