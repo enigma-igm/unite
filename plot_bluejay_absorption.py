@@ -199,9 +199,9 @@ def main():
         w, f, e = spectra['G395M']
         mask = (w >= xmin - 0.02) & (w <= xmax + 0.02)
         if mask.sum() > 0:
-            ax.step(w[mask], f[mask], where='mid', color='C2', lw=1)
+            ax.step(w[mask], f[mask], where='mid', color='C2', lw=1, zorder=3)
             ax.fill_between(w[mask], f[mask] - e[mask], f[mask] + e[mask],
-                            step='mid', color='C2', alpha=0.2)
+                            step='mid', color='C2', alpha=0.2, zorder=2)
 
         # Auto y-limits from visible data
         vis = (w >= xmin) & (w <= xmax)
@@ -213,15 +213,15 @@ def main():
             margin = 0.15 * (yhi - ylo)
             ax.set_ylim(ylo - margin, yhi + 2 * margin)
 
-        # Mark lines
+        # Mark lines (behind spectrum)
         for name, lam_rest in lines.items():
             lam_obs = lam_rest * (1 + Z) / 1e4
             color = 'green' if 'HeI' in name else 'blue'
-            ax.axvline(lam_obs, ls='--', color=color, alpha=0.7, lw=1.5)
+            ax.axvline(lam_obs, ls='--', color=color, alpha=0.25, lw=1, zorder=1)
             ax.text(lam_obs, ax.get_ylim()[1] * 0.97, name,
                     ha='center', va='top', fontsize=10, color=color,
                     bbox=dict(boxstyle='round,pad=0.15', fc='white',
-                              ec=color, alpha=0.8))
+                              ec=color, alpha=0.8), zorder=5)
 
         # Add rest-frame axis
         ax_r = ax.twiny()
