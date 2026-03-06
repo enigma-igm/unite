@@ -34,6 +34,7 @@ def multiSpecModel(
     cont_regs: jnp.ndarray,
     cont_guesses: jnp.ndarray,
     absorption_enabled: bool = False,
+    calibration_fn=None,
 ) -> None:
     """
     Multi-Spectrum Model
@@ -61,7 +62,9 @@ def multiSpecModel(
     """
 
     # Build Spectrum Calibration
-    calib = NIRSpecCalibration(spectra.names, spectra.fixed)
+    if calibration_fn is None:
+        calibration_fn = NIRSpecCalibration
+    calib = calibration_fn(spectra.names, spectra.fixed)
 
     # Unpack matrices
     orig, add, orig_add = matrices

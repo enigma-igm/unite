@@ -330,7 +330,7 @@ def saveResults(config, rows, model_args, samples, extras, output_dir) -> None:
     savename = f'{output_dir}/Results/{rows[0]["root"]}-{rows[0]["srcid"]}{cname}'
 
     # Unpack model args
-    spectra, _, _, _, _, cont_regs, _, absorption_enabled = model_args
+    spectra, _, _, _, _, cont_regs, _, absorption_enabled = model_args[:8]
 
     # Correct sample units
     samples['flux_all'] = samples['flux_all'] * (spectra.fλ_unit * spectra.λ_unit).to(
@@ -634,7 +634,7 @@ def plotResults(
     os.makedirs(plot_subdir, exist_ok=True)
 
     # Unpack model arguements
-    spectra, _, _, line_centers, _, cont_regs, _, absorption_enabled = model_args
+    spectra, _, _, line_centers, _, cont_regs, _, absorption_enabled = model_args[:8]
 
     # Get the number of spectra and regions
     Nspec, Nregs = len(spectra.spectra), len(cont_regs)
